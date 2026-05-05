@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <title>CHIP-8 Arcade</title>
+    <style>
+        body { background: #0f0f1b; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+        .game-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; max-width: 1000px; margin: 0 auto 30px; }
+        .game-card { background: #1e1e2e; border-radius: 10px; padding: 10px; cursor: pointer; transition: 0.3s; border: 2px solid transparent; }
+        .game-card:hover { transform: scale(1.05); border-color: #7d5fff; }
+        .game-card img { width: 100%; border-radius: 5px; height: 100px; object-fit: cover; }
+        #emulator-wrap { display: none; margin-top: 20px; }
+        canvas { background: #000; width: 640px; height: 320px; border: 3px solid #333; image-rendering: pixelated; }
+    </style>
+</head>
+<body>
+
+    <h2>Featured Games</h2>
+    <div class="game-grid">
+        <div class="game-card" onclick="playGame('roms/pong.ch8')">
+            <img src="https://placehold.co/200x100/7d5fff/white?text=PONG" alt="Pong">
+            <p>Pong</p>
+        </div>
+        <div class="game-card" onclick="playGame('roms/invaders.ch8')">
+            <img src="https://placehold.co/200x100/ff4757/white?text=INVADERS" alt="Invaders">
+            <p>Space Invaders</p>
+        </div>
+    </div>
+
+    <div id="emulator-wrap">
+        <canvas id="screen" width="64" height="32"></canvas>
+        <p>Controls: 1-4, Q-R, A-F, Z-V</p>
+    </div>
+
+    <script type="module">
+        import Chip8 from './chip8.js';
+
+        const chip8 = new Chip8();
+        const canvas = document.getElementById('screen');
+        const ctx = canvas.getContext('2d');
+        const wrap = document.getElementById('emulator-wrap');
+
+        const KEY_MAP = {
+            '1': 0x1, '2': 0x2, '3': 0x3, '4': 0xC,
+            'q': 0x4, 'w': 0x5, 'e': 0x6, 'r': 0xD,
+            'a': 0x7, 's': 0x8, 'd': 0x9, 'f': 0xE,
+            'z': 0xA, 'x': 0x0, 'c': 0xB, 'v': 0xF
+        };
+
+        window.addEventListener('keydown', (e) => chip8.setKey(KEY_MAP[e.key], true));
+        window.addEventListener('keyup', (e) => chip8.setKey(KEY_MAP[e.key], false));
+
+        window.playGame = async function(url) {
+            const res = await fetch(url);
+            const buffer = await res.arrayBuffer();
+            chip8.loadRom(buffer);
+            chip8.paused = false;
+            wrap.style.display = 'block';
+            wrap.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function loop() {
+            if (!chip8.paused) { for (let i = 0; i < 10; i++) chip8.cycle(); }
+            if (chip8.getDrawFlag()) {
+                const gfx = chip8.getFramebuffer();
+                ctx.fillStyle = 'black'; ctx.fillRect(0, 0, 64, 32);
+                ctx.fillStyle = '#00ff00';
+                for (let i = 0; i < 2048; i++) {
+                    if (gfx[i]) ctx.fillRect(i % 64, Math.floor(i / 64), 1, 1);
+                }
+                chip8.clearDrawFlag();
+            }
+            requestAnimationFrame(loop);
+        }
+
+        setInterval(() => chip8.tickTimers(), 1000/60);
+        loop();
+    </script>
+</body>
+</html>
