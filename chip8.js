@@ -33,7 +33,8 @@ export default class Chip8 {
       0xF0,0x80,0x80,0x80,0xF0, 0xE0,0x90,0x90,0x90,0xE0,
       0xF0,0x80,0xF0,0x80,0xF0, 0xF0,0x80,0xF0,0x80,0x80
     ];
-    for (let i = 0; i < fontset.length; i++) this.memory[i] = fontset[i];
+    // Load fontset at 0x50 (standard CHIP-8 location)
+    for (let i = 0; i < fontset.length; i++) this.memory[0x50 + i] = fontset[i];
   }
 
   loadRom(arrayBuffer) {
@@ -51,7 +52,7 @@ export default class Chip8 {
 
     const opcode = (this.memory[this.pc] << 8) | this.memory[this.pc + 1];
     this.opcode = opcode;
-    this.pc = (this.pc + 2) & 0xFFF;
+    this.pc = (this.pc + 2) % 0x1000;
 
     const x = (opcode & 0x0F00) >> 8;
     const y = (opcode & 0x00F0) >> 4;
@@ -65,19 +66,21 @@ export default class Chip8 {
           this.gfx.fill(0);
           this.drawFlag = true;
         } else if (opcode === 0x00EE) { 
-          this.sp = (this.sp - 1) & 0xF;
+          if (this.sp === 0) { console.error("Stack underflow"); return; }
+          this.sp--;
           this.pc = this.stack[this.sp];
         }
         break;
       case 0x1000: this.pc = nnn; break;
       case 0x2000: 
+        if (this.sp >= 16) { console.error("Stack overflow"); return; }
         this.stack[this.sp] = this.pc;
-        this.sp = (this.sp + 1) & 0xF;
+        this.sp++;
         this.pc = nnn;
         break;
-      case 0x3000: if (this.V[x] === kk) this.pc = (this.pc + 2) & 0xFFF; break;
-      case 0x4000: if (this.V[x] !== kk) this.pc = (this.pc + 2) & 0xFFF; break;
-      case 0x5000: if (this.V[x] === this.V[y]) this.pc = (this.pc + 2) & 0xFFF; break;
+      case 0x3000: if (this.V[x] === kk) this.pc = (this.pc + 2) % 0x1000; break;
+      case 0x4000: if (this.V[x] !== kk) this.pc = (this.pc + 2) % 0x1000; break;
+      case 0x5000: if (this.V[x] === this.V[y]) this.pc = (this.pc + 2) % 0x1000; break;
       case 0x6000: this.V[x] = kk; break;
       case 0x7000: this.V[x] = (this.V[x] + kk) & 0xFF; break;
       case 0x8000:
@@ -110,9 +113,9 @@ export default class Chip8 {
             break;
         }
         break;
-      case 0x9000: if (this.V[x] !== this.V[y]) this.pc = (this.pc + 2) & 0xFFF; break;
+      case 0x9000: if (this.V[x] !== this.V[y]) this.pc = (this.pc + 2) % 0x1000; break;
       case 0xA000: this.I = nnn; break;
-      case 0xB000: this.pc = (nnn + this.V[0]) & 0xFFF; break;
+      case 0xB000: this.pc = (nnn + this.V[0]) % 0x1000; break;
       case 0xC000:
         this.V[x] = (Math.floor(Math.random() * 256) & kk) & 0xFF;
         break;
@@ -138,8 +141,8 @@ export default class Chip8 {
         break;
       }
       case 0xE000:
-        if ((opcode & 0x00FF) === 0x9E) { if (this.keys[this.V[x]] === 1) this.pc = (this.pc + 2) & 0xFFF; }
-        if ((opcode & 0x00FF) === 0xA1) { if (this.keys[this.V[x]] === 0) this.pc = (this.pc + 2) & 0xFFF; }
+        if ((opcode & 0x00FF) === 0x9E) { if (this.keys[this.V[x]] === 1) this.pc = (this.pc + 2) % 0x1000; }
+        if ((opcode & 0x00FF) === 0xA1) { if (this.keys[this.V[x]] === 0) this.pc = (this.pc + 2) % 0x1000; }
         break;
       case 0xF000:
         switch (opcode & 0x00FF) {
@@ -151,7 +154,7 @@ export default class Chip8 {
           case 0x15: this.delayTimer = this.V[x]; break;
           case 0x18: this.soundTimer = this.V[x]; break;
           case 0x1E: this.I = (this.I + this.V[x]) & 0xFFFF; break;
-          case 0x29: this.I = (this.V[x] & 0xF) * 5; break;
+          case 0x29: this.I = (this.V[x] & 0xF) * 5 + 0x50; break;
           case 0x33: {
             let val = this.V[x];
             this.memory[this.I + 2] = val % 10;
@@ -178,6 +181,7 @@ export default class Chip8 {
   }
 
   setKey(keyIndex, pressed) {
+    if (keyIndex === undefined) return;
     keyIndex &= 0xF;
     this.keys[keyIndex] = pressed ? 1 : 0;
     if (this.waitKey && pressed) {
